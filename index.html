@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bubble Sort Visualizer - Smooth Bars</title>
+<style>
+body {
+  background: #0b0f1a;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  font-family: sans-serif;
+  color: #fff;
+}
+
+#container {
+  display: flex;
+  align-items: flex-end;
+  height: 400px;
+  width: 90vw;
+  overflow: hidden;
+  margin-bottom: 20px;
+  border: 1px solid #444;
+  padding: 10px 0;
+  background: linear-gradient(to top, #0b0f1a, #1e293b);
+}
+
+.bar {
+  background: #9ca3af;
+  transition: height 0.15s, background-color 0.15s;
+  transform-origin: bottom;
+}
+
+.compare {
+  background: #3b82f6;
+}
+
+.sorted {
+  background: #22c55e;
+}
+
+.controls {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+button {
+  background: #3b82f6;
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  margin: 0 5px;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: #2563eb;
+}
+
+input[type=number] {
+  padding: 6px;
+  width: 80px;
+  margin-left: 5px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  color: black;
+}
+
+input[type=range] {
+  width: 200px;
+  margin-left: 10px;
+}
+
+label {
+  margin-left: 10px;
+}
+</style>
+</head>
+<body>
+
+<div id="container"></div>
+
+<div class="controls">
+  <button id="startBtn">Start</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<div class="controls">
+  <input type="number" id="barCount" placeholder="Number of bars" min="5" max="200">
+  <button id="setBarsBtn">Set Bars</button>
+</div>
+
+<div class="controls">
+  <label>Speed (1–500):</label>
+  <input type="range" id="speedSlider" min="1" max="500" step="1" value="100">
+  <input type="number" id="speedInput" min="1" max="10000" step="1" value="100">
+</div>
+
+<script>
+let bars = [];
+let NUM_BARS = 50;
+const container = document.getElementById("container");
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let isSorting = false;
+let isPaused = false;
+
+// Speed mapping
+let speed = 100; // internal milliseconds per step
+const MIN_FREQ = 130;
+const MAX_FREQ = 1046;
+
+// Create smooth bars with linear progression and shuffle
+function createBars(count = NUM_BARS) {
+  NUM_BARS = count;
+  container.innerHTML = "";
+  bars = [];
+
+  const barWidth = Math.max(5, container.clientWidth / NUM_BARS - 2);
+
+  // Create linearly increasing heights
+  const heights = [];
+  for (let i = 0; i < NUM_BARS; i++) {
+    const height = 50 + i * (300 / (NUM_BARS - 1));
+    heights.push(height);
+  }
+
+  // Shuffle heights for initial state
+  for (let i = heights.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [heights[i], heights[j]] = [heights[j], heights[i]];
+  }
+
+  for (let i = 0; i < NUM_BARS; i++) {
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.height = heights[i] + "px";
+    bar.style.width = `${barWidth}px`;
+    container.appendChild(bar);
+    bars.push({ element: bar, height: heights[i] });
+  }
+}
+
+// Play tone
+function playTone(height) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const freq = MIN_FREQ + (height - 50) / 300 * (MAX_FREQ - MIN_FREQ);
+  osc.frequency.value = freq;
+  osc.gain = 0.05;
+  osc.type = 'sine';
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  gain.gain.value = 0.05;
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.08);
+}
+
+// Swap bars
+function swap(i, j) {
+  [bars[i].height, bars[j].height] = [bars[j].height, bars[i].height];
+  bars[i].element.style.height = bars[i].height + "px";
+  bars[j].element.style.height = bars[j].height + "px";
+}
+
+// Sleep helper
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Correct bubble sort marking: mark only if in correct final position
+async function bubbleSort() {
+  isSorting = true;
+
+  for (let i = 0; i < bars.length; i++) {
+    let swapped = false;
+
+    for (let j = 0; j < bars.length - i - 1; j++) {
+      while (isPaused) await sleep(50);
+
+      bars[j].element.classList.add("compare");
+      bars[j + 1].element.classList.add("compare");
+
+      playTone(bars[j].height);
+      await sleep(speed);
+
+      if (bars[j].height > bars[j + 1].height) {
+        swap(j, j + 1);
+        swapped = true;
+      }
+
+      bars[j].element.classList.remove("compare");
+      bars[j + 1].element.classList.remove("compare");
+    }
+
+    // Only mark last unsorted bar as sorted
+    bars[bars.length - i - 1].element.classList.add("sorted");
+
+    if (!swapped) {
+      // Mark remaining bars sorted
+      for (let k = 0; k < bars.length - i - 1; k++) {
+        bars[k].element.classList.add("sorted");
+      }
+      break;
+    }
+  }
+
+  isSorting = false;
+}
+
+// Buttons
+document.getElementById("startBtn").addEventListener("click", () => {
+  if (!isSorting) bubbleSort();
+  isPaused = false;
+});
+
+document.getElementById("pauseBtn").addEventListener("click", () => {
+  isPaused = true;
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  isPaused = false;
+  isSorting = false;
+  createBars();
+});
+
+document.getElementById("setBarsBtn").addEventListener("click", () => {
+  const count = parseInt(document.getElementById("barCount").value);
+  if (!isNaN(count) && count >= 5 && count <= 200) {
+    isPaused = false;
+    isSorting = false;
+    createBars(count);
+  }
+});
+
+// Speed slider mapping: 1–500 slider maps to 1–500ms internally
+const slider = document.getElementById("speedSlider");
+const input = document.getElementById("speedInput");
+
+slider.addEventListener("input", () => {
+  speed = parseInt(slider.value);
+  input.value = speed;
+});
+
+input.addEventListener("change", () => {
+  let val = parseInt(input.value);
+  if (isNaN(val) || val < 1) val = 1;
+  if (val > 10000) val = 10000;
+  speed = val;
+  slider.value = Math.min(val, 500);
+});
+
+createBars();
+</script>
+
+</body>
+</html>
